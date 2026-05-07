@@ -53,6 +53,7 @@ COORDINATE_FORMAT = ".6f"
 ALTITUDE_FORMAT = ".3f"
 TIME_FORMAT = ".3f"
 CURVE_HEADING_ROUND_DECIMALS = 3
+LOOP_CLOSURE_AZIMUTH_THRESHOLD = 300.0
 
 AZIMUTH_COLUMN_INDEX = 15
 LATITUDE_COLUMN_INDEX = 16
@@ -291,7 +292,10 @@ def save_plots(data, show_plots=True, target_label_base="目标物"):
     output_3d = prefix.with_name(prefix.name + "_3d.png")
     output_top = prefix.with_name(prefix.name + "_top.png")
     azimuth_span = max(azimuths) - min(azimuths) if len(azimuths) > 1 else 0.0
-    should_close_loop = azimuth_span >= 300.0
+    should_close_loop = azimuth_span >= LOOP_CLOSURE_AZIMUTH_THRESHOLD
+    midpoint_label = "半圈位置" if should_close_loop else "中点位置"
+    plot_title = "飞行器绕目标物飞行一圈轨迹" if should_close_loop else "飞行器曲线轨迹"
+    top_plot_title = "飞行轨迹俯视图（经纬度平面）"
 
     center_lat = sum(lats) / len(lats)
     center_lon = sum(lons) / len(lons)
@@ -320,7 +324,7 @@ def save_plots(data, show_plots=True, target_label_base="目标物"):
         color="red",
         s=80,
         zorder=5,
-        label="半圈位置",
+        label=midpoint_label,
     )
     axis.scatter(
         [center_lon],
@@ -339,7 +343,7 @@ def save_plots(data, show_plots=True, target_label_base="目标物"):
     axis.set_xlabel("经度 (°E)")
     axis.set_ylabel("纬度 (°N)")
     axis.set_zlabel("高度 (m)")
-    axis.set_title("飞行器绕目标物飞行一圈轨迹")
+    axis.set_title(plot_title)
     axis.legend(loc="upper left")
     plt.tight_layout()
     plt.savefig(output_3d, dpi=150)
@@ -348,7 +352,7 @@ def save_plots(data, show_plots=True, target_label_base="目标物"):
     figure2, axis2 = plt.subplots(figsize=(7, 7))
     axis2.plot(path_lons, path_lats, "b-o", markersize=5, label="飞行轨迹")
     axis2.scatter(lons[0], lats[0], color="green", s=80, zorder=5, label="起点")
-    axis2.scatter(lons[half_index], lats[half_index], color="red", s=80, zorder=5, label="半圈位置")
+    axis2.scatter(lons[half_index], lats[half_index], color="red", s=80, zorder=5, label=midpoint_label)
     axis2.scatter(
         center_lon,
         center_lat,
@@ -371,7 +375,7 @@ def save_plots(data, show_plots=True, target_label_base="目标物"):
 
     axis2.set_xlabel("经度 (°E)")
     axis2.set_ylabel("纬度 (°N)")
-    axis2.set_title("飞行轨迹俯视图（经纬度平面）")
+    axis2.set_title(top_plot_title)
     axis2.legend()
     axis2.set_aspect("equal")
     axis2.grid(True, linestyle="--", alpha=0.5)
