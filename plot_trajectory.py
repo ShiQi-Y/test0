@@ -56,13 +56,14 @@ AZIMUTH_COLUMN_INDEX = 15
 LATITUDE_COLUMN_INDEX = 16
 LONGITUDE_COLUMN_INDEX = 17
 ALTITUDE_COLUMN_INDEX = 18
+DEFAULT_INPUT_FILENAME = "trajectory.txt"
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="绘制轨迹，或按目标经纬度生成并绘制轨迹。")
     parser.add_argument(
         "--input",
-        default="trajectory.txt",
+        default=DEFAULT_INPUT_FILENAME,
         help="要读取的轨迹文件；若同时指定目标经纬度，则生成后从该文件读取。",
     )
     parser.add_argument("--target-lat", type=float, help="目标纬度")
@@ -81,7 +82,7 @@ def parse_args():
 
 
 def slugify_target_name(target_name):
-    return re.sub(r"[^\w\-]+", "_", target_name.strip()).strip("_")
+    return re.sub(r"[^\w-]+", "_", target_name.strip()).strip("_")
 
 
 def default_output_path_for_target(target_lat, target_lon, target_name):
@@ -302,7 +303,7 @@ def main():
         if args.target_lat is None or args.target_lon is None:
             raise ValueError("如果要生成轨迹，必须同时提供 --target-lat 和 --target-lon。")
         output_path = Path(args.input)
-        if output_path == Path("trajectory.txt"):
+        if args.input == DEFAULT_INPUT_FILENAME:
             output_path = default_output_path_for_target(args.target_lat, args.target_lon, args.target_name)
         generate_trajectory_file(
             output_path=output_path,
@@ -317,8 +318,8 @@ def main():
         output_path = Path(args.input)
 
     trajectory_data = load_trajectory(output_path)
-    target_label_base = f"目标:{args.target_name}" if args.target_name else "目标物"
-    save_plots(trajectory_data, show_plots=not args.no_show, target_label_base=target_label_base)
+    target_label = f"目标:{args.target_name}" if args.target_name else "目标物"
+    save_plots(trajectory_data, show_plots=not args.no_show, target_label_base=target_label)
 
 
 if __name__ == "__main__":
