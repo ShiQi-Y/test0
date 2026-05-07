@@ -83,9 +83,14 @@ def parse_args():
     parser.add_argument("--azimuth-step", type=float, default=10.0, help="方位角步长（度）")
     parser.add_argument("--curve-points", type=int, default=37, help="曲线轨迹采样点数（>=2）")
     parser.add_argument("--curve-span", type=float, default=2000.0, help="曲线跨越长度（米）")
-    parser.add_argument("--curve-bulge", type=float, default=0.0, help="曲线横向弯曲幅度（米，默认0表示中段正好穿越目标）")
+    parser.add_argument(
+        "--curve-bulge",
+        type=float,
+        default=0.0,
+        help="曲线横向弯曲幅度（米，允许为0；0表示中段正好穿越目标）",
+    )
     parser.add_argument("--curve-bearing", type=float, default=90.0, help="曲线主方向（度，0北90东）")
-    parser.add_argument("--curve-duration", type=float, default=100.0, help="曲线总时长（秒）")
+    parser.add_argument("--curve-duration", type=float, default=100.0, help="曲线总时长（秒，默认约100秒）")
     parser.add_argument("--curve-peak-altitude", type=float, help="曲线最高点高度（米，默认比起终点高度高3000米）")
     parser.add_argument("--time-step", type=float, default=0.1, help="时间步长（秒）")
     parser.add_argument(
@@ -225,7 +230,7 @@ def generate_curve_trajectory_file(
     for index in range(point_count):
         progress = index / (point_count - 1)
         longitudinal_offset = (progress - 0.5) * span_meters
-        # 使用 2π 让横向偏移在中点回到 0，确保中段从目标上方穿越。
+        # 使用 2π 让横向偏移在起点/中点/终点都回到 0，确保中段从目标上方穿越。
         lateral_offset = bulge_meters * math.sin(2.0 * math.pi * progress)
         delta_north = longitudinal_offset * math.cos(heading_rad) - lateral_offset * math.sin(heading_rad)
         delta_east = longitudinal_offset * math.sin(heading_rad) + lateral_offset * math.cos(heading_rad)
@@ -250,6 +255,7 @@ def generate_curve_trajectory_file(
 
         lat = target_lat + delta_north / METERS_PER_DEGREE_LATITUDE
         lon = target_lon + delta_east / lon_scale
+        # 使用 sin(πp) 形成“起终点低、中点高”的过顶高度曲线。
         altitude_value = altitude + (peak_altitude - altitude) * math.sin(math.pi * progress)
         azimuth = round(calculate_azimuth_deg(motion_north, motion_east), CURVE_AZIMUTH_ROUND_DECIMALS)
         time_value = progress * duration_seconds
