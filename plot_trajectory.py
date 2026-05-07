@@ -93,7 +93,7 @@ def parse_args():
         help="曲线横向弯曲幅度（米，允许为0；0表示沿主方向直线穿越目标）",
     )
     parser.add_argument("--curve-bearing", type=float, default=90.0, help="曲线主方向（度，0北90东）")
-    parser.add_argument("--curve-duration", type=float, default=100.0, help="曲线总时长（秒，默认100秒；仅 curve 模式生效）")
+    parser.add_argument("--curve-duration", type=float, default=100.0, help="曲线总时长（秒，默认100秒；curve / curve-lookat 模式生效）")
     parser.add_argument(
         "--curve-peak-altitude",
         type=float,
