@@ -52,7 +52,7 @@ ANGLE_FORMAT = ".3f"
 COORDINATE_FORMAT = ".6f"
 ALTITUDE_FORMAT = ".3f"
 TIME_FORMAT = ".3f"
-CURVE_HEADING_ROUND_DECIMALS = 3
+CURVE_AZIMUTH_ROUND_DECIMALS = 3
 MIN_AZIMUTH_SPAN_FOR_LOOP_CLOSURE = 300.0
 
 AZIMUTH_COLUMN_INDEX = 15
@@ -109,7 +109,7 @@ def default_output_path_for_target(target_lat, target_lon, target_name, trajecto
     return Path(f"{prefix}_lat{lat_tag}_lon{lon_tag}.txt")
 
 
-def calculate_heading_deg(delta_north, delta_east):
+def calculate_azimuth_deg(delta_north, delta_east):
     return math.degrees(math.atan2(delta_east, delta_north)) % 360.0
 
 
@@ -238,7 +238,7 @@ def generate_curve_trajectory_file(
 
         lat = target_lat + delta_north / METERS_PER_DEGREE_LATITUDE
         lon = target_lon + delta_east / lon_scale
-        heading = round(calculate_heading_deg(motion_north, motion_east), CURVE_HEADING_ROUND_DECIMALS)
+        azimuth = round(calculate_azimuth_deg(motion_north, motion_east), CURVE_AZIMUTH_ROUND_DECIMALS)
         time_value = index * time_step
         row = [
             f"{time_value:{TIME_FORMAT}}",
@@ -256,7 +256,7 @@ def generate_curve_trajectory_file(
             "0",
             "0",
             f"{pitch_deg:{ANGLE_FORMAT}}",
-            f"{heading:{ANGLE_FORMAT}}",
+            f"{azimuth:{ANGLE_FORMAT}}",
             f"{lat:{COORDINATE_FORMAT}}",
             f"{lon:{COORDINATE_FORMAT}}",
             f"{altitude:{ALTITUDE_FORMAT}}",
