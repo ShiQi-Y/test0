@@ -45,6 +45,7 @@ HEADER = "\t".join(
 )
 METERS_PER_DEGREE_LATITUDE = 111000.0
 AZIMUTH_LOOP_EPSILON = 1e-9
+LONGITUDE_SCALE_EPSILON = 1e-9
 AZIMUTH_ROUND_DECIMALS = 10
 ANGLE_FORMAT = ".3f"
 COORDINATE_FORMAT = ".6f"
@@ -113,7 +114,7 @@ def generate_trajectory_file(
 
     horizontal_radius = altitude * math.tan(math.radians(90.0 - pitch_deg))
     lon_scale = METERS_PER_DEGREE_LATITUDE * math.cos(math.radians(target_lat))
-    if abs(lon_scale) < 1e-9:
+    if abs(lon_scale) < LONGITUDE_SCALE_EPSILON:
         raise ValueError("目标纬度过于接近极点，无法稳定换算经度偏移。")
 
     rows = [HEADER]
@@ -196,7 +197,7 @@ def load_trajectory(txt_file):
     }
 
 
-def save_plots(data, show_plots=True, target_label="目标物"):
+def save_plots(data, show_plots=True, target_label_base="目标物"):
     lats = data["lats"]
     lons = data["lons"]
     alts = data["alts"]
@@ -231,7 +232,16 @@ def save_plots(data, show_plots=True, target_label="目标物"):
         zorder=5,
         label="半圈位置",
     )
-    axis.scatter([center_lon], [center_lat], [0], color="orange", s=120, marker="*", zorder=5, label=target_label)
+    axis.scatter(
+        [center_lon],
+        [center_lat],
+        [0],
+        color="orange",
+        s=120,
+        marker="*",
+        zorder=5,
+        label=f"{target_label_base}",
+    )
 
     for lon, lat, alt, azimuth in zip(lons, lats, alts, azimuths):
         axis.text(lon, lat, alt + 30, f"{int(round(azimuth))}°", fontsize=6, ha="center", color="gray")
@@ -249,7 +259,15 @@ def save_plots(data, show_plots=True, target_label="目标物"):
     axis2.plot(lons + [lons[0]], lats + [lats[0]], "b-o", markersize=5, label="飞行轨迹")
     axis2.scatter(lons[0], lats[0], color="green", s=80, zorder=5, label="起点")
     axis2.scatter(lons[half_index], lats[half_index], color="red", s=80, zorder=5, label="半圈位置")
-    axis2.scatter(center_lon, center_lat, color="orange", s=120, marker="*", zorder=5, label=f"{target_label}中心")
+    axis2.scatter(
+        center_lon,
+        center_lat,
+        color="orange",
+        s=120,
+        marker="*",
+        zorder=5,
+        label=f"{target_label_base}中心",
+    )
 
     for lon, lat, azimuth in zip(lons, lats, azimuths):
         axis2.annotate(
@@ -299,8 +317,8 @@ def main():
         output_path = Path(args.input)
 
     trajectory_data = load_trajectory(output_path)
-    target_label = f"目标:{args.target_name}" if args.target_name else "目标物"
-    save_plots(trajectory_data, show_plots=not args.no_show, target_label=target_label)
+    target_label_base = f"目标:{args.target_name}" if args.target_name else "目标物"
+    save_plots(trajectory_data, show_plots=not args.no_show, target_label_base=target_label_base)
 
 
 if __name__ == "__main__":
