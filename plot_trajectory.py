@@ -41,6 +41,9 @@ HEADER = "\t".join(
         "高度",
     ]
 )
+METERS_PER_DEGREE_LATITUDE = 111000.0
+AZIMUTH_LOOP_EPSILON = 1e-9
+AZIMUTH_ROUND_DECIMALS = 10
 
 
 def parse_args():
@@ -76,30 +79,31 @@ def generate_trajectory_file(
     if altitude <= 0:
         raise ValueError("altitude 必须为正数。")
     if not (0 < pitch_deg < 90):
-        raise ValueError("pitch 必须在 0 到 90 度之间（不含端点）。")
+        raise ValueError("pitch 必须在 0 到 90 度之间（不含端点），以确保水平半径计算有效。")
     if azimuth_step <= 0:
         raise ValueError("azimuth-step 必须大于 0。")
     if time_step <= 0:
         raise ValueError("time-step 必须大于 0。")
 
     horizontal_radius = altitude * math.tan(math.radians(90.0 - pitch_deg))
-    lon_scale = 111000.0 * math.cos(math.radians(target_lat))
+    lon_scale = METERS_PER_DEGREE_LATITUDE * math.cos(math.radians(target_lat))
     if abs(lon_scale) < 1e-9:
         raise ValueError("目标纬度过于接近极点，无法稳定换算经度偏移。")
 
     rows = [HEADER]
     index = 0
     azimuth = 0.0
-    while azimuth < 360.0 - 1e-9:
+    while azimuth < 360.0 - AZIMUTH_LOOP_EPSILON:
         azimuth_rad = math.radians(azimuth)
         delta_north = horizontal_radius * math.cos(azimuth_rad)
         delta_east = horizontal_radius * math.sin(azimuth_rad)
 
-        lat = target_lat + delta_north / 111000.0
+        lat = target_lat + delta_north / METERS_PER_DEGREE_LATITUDE
         lon = target_lon + delta_east / lon_scale
+        time_value = index * time_step
 
         row = [
-            f"{index * time_step:.3f}",
+            f"{time_value:.3f}",
             "0",
             "0",
             "0",
@@ -122,7 +126,8 @@ def generate_trajectory_file(
         rows.append("\t".join(row))
 
         index += 1
-        azimuth = round(index * azimuth_step, 10)
+        # 对累积方位角做有限精度舍入，避免浮点误差导致 360° 附近多出或少掉一个点。
+        azimuth = round(index * azimuth_step, AZIMUTH_ROUND_DECIMALS)
 
     output_path = Path(output_path)
     output_path.write_text("\n".join(rows), encoding="utf-8")
@@ -143,7 +148,7 @@ def load_trajectory(txt_file):
             columns = line.split("\t")
             if len(columns) < 19:
                 raise ValueError(
-                    f"第 {line_number + 1} 行列数不足：期望至少 19 列，实际 {len(columns)} 列。"
+                    f"文件 {txt_path} 第 {line_number + 1} 行列数不足：期望至少 19 列，实际 {len(columns)} 列。"
                 )
             times.append(float(columns[0]))
             alts.append(float(columns[18]))
