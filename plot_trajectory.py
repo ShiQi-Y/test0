@@ -52,9 +52,8 @@ ANGLE_FORMAT = ".3f"
 COORDINATE_FORMAT = ".6f"
 ALTITUDE_FORMAT = ".3f"
 TIME_FORMAT = ".3f"
-CURVE_AZIMUTH_ROUND_DECIMALS = 3
-# 360° 轨迹在离散采样（如 10°步长）下通常只覆盖到 350°，因此以 300° 作为“可视化闭环”判定阈值。
-MIN_AZIMUTH_SPAN_FOR_LOOP_CLOSURE = 300.0
+CURVE_AZIMUTH_ROUND_DECIMALS = AZIMUTH_ROUND_DECIMALS
+MIN_AZIMUTH_SPAN_FOR_LOOP_CLOSURE = 180.0
 
 AZIMUTH_COLUMN_INDEX = 15
 LATITUDE_COLUMN_INDEX = 16
@@ -318,16 +317,22 @@ def save_plots(data, show_plots=True, target_label_base="目标物"):
     output_3d = prefix.with_name(prefix.name + "_3d.png")
     output_top = prefix.with_name(prefix.name + "_top.png")
     azimuth_span = max(azimuths) - min(azimuths) if len(azimuths) > 1 else 0.0
-    should_close_loop = azimuth_span >= MIN_AZIMUTH_SPAN_FOR_LOOP_CLOSURE
-    midpoint_label = "半圈位置" if should_close_loop else "中点位置"
-    plot_title = "飞行器绕目标物飞行一圈轨迹" if should_close_loop else "飞行器曲线轨迹"
+    azimuth_steps = [abs(current - previous) for previous, current in zip(azimuths, azimuths[1:]) if abs(current - previous) > 0]
+    representative_step = min(azimuth_steps) if azimuth_steps else 10.0
+    loop_visualization_threshold = max(
+        MIN_AZIMUTH_SPAN_FOR_LOOP_CLOSURE,
+        360.0 - 2.0 * representative_step,
+    )
+    should_use_loop_visualization = azimuth_span >= loop_visualization_threshold
+    midpoint_label = "中点位置"
+    plot_title = "飞行器绕目标物飞行一圈轨迹" if should_use_loop_visualization else "飞行器曲线轨迹"
     top_plot_title = "飞行轨迹俯视图（经纬度平面）"
 
     center_lat = sum(lats) / len(lats)
     center_lon = sum(lons) / len(lons)
-    path_lons = lons + [lons[0]] if should_close_loop else lons
-    path_lats = lats + [lats[0]] if should_close_loop else lats
-    path_alts = alts + [alts[0]] if should_close_loop else alts
+    path_lons = lons + [lons[0]] if should_use_loop_visualization else lons
+    path_lats = lats + [lats[0]] if should_use_loop_visualization else lats
+    path_alts = alts + [alts[0]] if should_use_loop_visualization else alts
 
     figure = plt.figure(figsize=(10, 7))
     axis = figure.add_subplot(111, projection="3d")
