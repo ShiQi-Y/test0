@@ -93,7 +93,7 @@ def parse_args():
         help="曲线横向弯曲幅度（米，允许为0；0表示沿主方向直线穿越目标）",
     )
     parser.add_argument("--curve-bearing", type=float, default=90.0, help="曲线主方向（度，0北90东）")
-    parser.add_argument("--curve-duration", type=float, default=100.0, help="曲线总时长（秒，默认100秒；curve / curve-lookat 模式生效）")
+    parser.add_argument("--curve-duration", type=float, default=100.0, help="曲线总时长（秒，默认100秒；curve、curve-lookat 模式生效）")
     parser.add_argument(
         "--curve-peak-altitude",
         type=float,
@@ -348,6 +348,7 @@ def generate_curve_trajectory_lookat_file(
         point_offsets.append((delta_north, delta_east))
 
     rows = [HEADER]
+    # 当路径点恰好在目标正上方时，朝向向量退化为零向量，使用反向主航向作为初始回退方位角。
     previous_azimuth = (bearing_deg + 180.0) % 360.0
     for index, (delta_north, delta_east) in enumerate(point_offsets):
         progress = index / (point_count - 1)
