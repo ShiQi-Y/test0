@@ -44,6 +44,15 @@ HEADER = "\t".join(
 METERS_PER_DEGREE_LATITUDE = 111000.0
 AZIMUTH_LOOP_EPSILON = 1e-9
 AZIMUTH_ROUND_DECIMALS = 10
+ANGLE_FORMAT = ".3f"
+COORDINATE_FORMAT = ".6f"
+ALTITUDE_FORMAT = ".3f"
+TIME_FORMAT = ".3f"
+
+AZIMUTH_COLUMN_INDEX = 15
+LATITUDE_COLUMN_INDEX = 16
+LONGITUDE_COLUMN_INDEX = 17
+ALTITUDE_COLUMN_INDEX = 18
 
 
 def parse_args():
@@ -79,7 +88,7 @@ def generate_trajectory_file(
     if altitude <= 0:
         raise ValueError("altitude 必须为正数。")
     if not (0 < pitch_deg < 90):
-        raise ValueError("pitch 必须在 0 到 90 度之间（不含端点），以确保水平半径计算有效。")
+        raise ValueError("pitch 必须在 0 到 90 度之间（不含端点），以生成当前这种有非零水平半径的环绕轨迹。")
     if azimuth_step <= 0:
         raise ValueError("azimuth-step 必须大于 0。")
     if time_step <= 0:
@@ -93,6 +102,7 @@ def generate_trajectory_file(
     rows = [HEADER]
     index = 0
     azimuth = 0.0
+    # 在 360° 前停止，避免浮点累积误差让最后一次循环重复到起点。
     while azimuth < 360.0 - AZIMUTH_LOOP_EPSILON:
         azimuth_rad = math.radians(azimuth)
         delta_north = horizontal_radius * math.cos(azimuth_rad)
@@ -103,7 +113,7 @@ def generate_trajectory_file(
         time_value = index * time_step
 
         row = [
-            f"{time_value:.3f}",
+            f"{time_value:{TIME_FORMAT}}",
             "0",
             "0",
             "0",
@@ -117,11 +127,11 @@ def generate_trajectory_file(
             "0",
             "0",
             "0",
-            f"{pitch_deg:.3f}",
-            f"{azimuth:.3f}",
-            f"{lat:.6f}",
-            f"{lon:.6f}",
-            f"{altitude:.3f}",
+            f"{pitch_deg:{ANGLE_FORMAT}}",
+            f"{azimuth:{ANGLE_FORMAT}}",
+            f"{lat:{COORDINATE_FORMAT}}",
+            f"{lon:{COORDINATE_FORMAT}}",
+            f"{altitude:{ALTITUDE_FORMAT}}",
         ]
         rows.append("\t".join(row))
 
@@ -151,10 +161,10 @@ def load_trajectory(txt_file):
                     f"文件 {txt_path} 第 {line_number + 1} 行列数不足：期望至少 19 列，实际 {len(columns)} 列。"
                 )
             times.append(float(columns[0]))
-            alts.append(float(columns[18]))
-            azimuths.append(float(columns[15]))
-            lats.append(float(columns[16]))
-            lons.append(float(columns[17]))
+            alts.append(float(columns[ALTITUDE_COLUMN_INDEX]))
+            azimuths.append(float(columns[AZIMUTH_COLUMN_INDEX]))
+            lats.append(float(columns[LATITUDE_COLUMN_INDEX]))
+            lons.append(float(columns[LONGITUDE_COLUMN_INDEX]))
 
     if not lats:
         raise ValueError(f"轨迹文件为空：{txt_path}")
