@@ -211,18 +211,34 @@ def generate_curve_trajectory_file(
         raise ValueError("目标纬度过于接近极点，无法稳定换算经度偏移。")
 
     heading_rad = math.radians(bearing_deg)
-    rows = [HEADER]
+    point_offsets = []
     for index in range(point_count):
         progress = index / (point_count - 1)
         longitudinal_offset = (progress - 0.5) * span_meters
         lateral_offset = bulge_meters * math.sin(math.pi * progress)
-
         delta_north = longitudinal_offset * math.cos(heading_rad) - lateral_offset * math.sin(heading_rad)
         delta_east = longitudinal_offset * math.sin(heading_rad) + lateral_offset * math.cos(heading_rad)
+        point_offsets.append((delta_north, delta_east))
+
+    rows = [HEADER]
+    for index, (delta_north, delta_east) in enumerate(point_offsets):
+        if index == 0:
+            next_north, next_east = point_offsets[index + 1]
+            motion_north = next_north - delta_north
+            motion_east = next_east - delta_east
+        elif index == point_count - 1:
+            prev_north, prev_east = point_offsets[index - 1]
+            motion_north = delta_north - prev_north
+            motion_east = delta_east - prev_east
+        else:
+            prev_north, prev_east = point_offsets[index - 1]
+            next_north, next_east = point_offsets[index + 1]
+            motion_north = next_north - prev_north
+            motion_east = next_east - prev_east
 
         lat = target_lat + delta_north / METERS_PER_DEGREE_LATITUDE
         lon = target_lon + delta_east / lon_scale
-        heading = round(calculate_heading_deg(delta_north, delta_east), CURVE_HEADING_ROUND_DECIMALS)
+        heading = round(calculate_heading_deg(motion_north, motion_east), CURVE_HEADING_ROUND_DECIMALS)
         time_value = index * time_step
         row = [
             f"{time_value:{TIME_FORMAT}}",
