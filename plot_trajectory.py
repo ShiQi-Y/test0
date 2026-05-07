@@ -53,6 +53,7 @@ COORDINATE_FORMAT = ".6f"
 ALTITUDE_FORMAT = ".3f"
 TIME_FORMAT = ".3f"
 CURVE_AZIMUTH_ROUND_DECIMALS = 3
+# 360° 轨迹在离散采样（如 10°步长）下通常只覆盖到 350°，因此以 300° 作为“可视化闭环”判定阈值。
 MIN_AZIMUTH_SPAN_FOR_LOOP_CLOSURE = 300.0
 
 AZIMUTH_COLUMN_INDEX = 15
@@ -110,6 +111,7 @@ def default_output_path_for_target(target_lat, target_lon, target_name, trajecto
 
 
 def calculate_azimuth_deg(delta_north, delta_east):
+    """由北向与东向位移分量计算方位角（度，范围 [0, 360)）。"""
     return math.degrees(math.atan2(delta_east, delta_north)) % 360.0
 
 
@@ -122,6 +124,7 @@ def generate_trajectory_file(
     azimuth_step=10.0,
     time_step=0.1,
 ):
+    """生成环绕目标的圆形轨迹，并按19列制表符格式写入txt。"""
     if altitude <= 0:
         raise ValueError("altitude 必须为正数。")
     if not (0 < pitch_deg < 90):
@@ -193,6 +196,7 @@ def generate_curve_trajectory_file(
     bearing_deg=90.0,
     time_step=0.1,
 ):
+    """生成通过目标区域的曲线轨迹，并按19列制表符格式写入txt。"""
     if altitude <= 0:
         raise ValueError("altitude 必须为正数。")
     if not (0 < pitch_deg < 90):
@@ -269,6 +273,7 @@ def generate_curve_trajectory_file(
 
 
 def load_trajectory(txt_file):
+    """读取19列制表符轨迹txt，返回 path/times/lats/lons/alts/azimuths 字典。"""
     txt_path = Path(txt_file)
     if not txt_path.exists():
         raise FileNotFoundError(f"未找到轨迹文件：{txt_path}")
@@ -304,6 +309,7 @@ def load_trajectory(txt_file):
 
 
 def save_plots(data, show_plots=True, target_label_base="目标物"):
+    """保存轨迹3D图与俯视图；大跨度方位角轨迹会按闭环方式绘制。"""
     lats = data["lats"]
     lons = data["lons"]
     alts = data["alts"]
