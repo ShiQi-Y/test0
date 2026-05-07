@@ -53,7 +53,7 @@ COORDINATE_FORMAT = ".6f"
 ALTITUDE_FORMAT = ".3f"
 TIME_FORMAT = ".3f"
 CURVE_HEADING_ROUND_DECIMALS = 3
-LOOP_CLOSURE_AZIMUTH_THRESHOLD = 300.0
+MIN_AZIMUTH_SPAN_FOR_LOOP_CLOSURE = 300.0
 
 AZIMUTH_COLUMN_INDEX = 15
 LATITUDE_COLUMN_INDEX = 16
@@ -107,6 +107,10 @@ def default_output_path_for_target(target_lat, target_lon, target_name, trajecto
     lat_tag = f"{target_lat:.6f}".replace("-", "m").replace(".", "p")
     lon_tag = f"{target_lon:.6f}".replace("-", "m").replace(".", "p")
     return Path(f"{prefix}_lat{lat_tag}_lon{lon_tag}.txt")
+
+
+def calculate_heading_deg(delta_north, delta_east):
+    return math.degrees(math.atan2(delta_east, delta_north)) % 360.0
 
 
 def generate_trajectory_file(
@@ -218,7 +222,7 @@ def generate_curve_trajectory_file(
 
         lat = target_lat + delta_north / METERS_PER_DEGREE_LATITUDE
         lon = target_lon + delta_east / lon_scale
-        heading = round(math.degrees(math.atan2(delta_east, delta_north)) % 360.0, CURVE_HEADING_ROUND_DECIMALS)
+        heading = round(calculate_heading_deg(delta_north, delta_east), CURVE_HEADING_ROUND_DECIMALS)
         time_value = index * time_step
         row = [
             f"{time_value:{TIME_FORMAT}}",
@@ -292,7 +296,7 @@ def save_plots(data, show_plots=True, target_label_base="目标物"):
     output_3d = prefix.with_name(prefix.name + "_3d.png")
     output_top = prefix.with_name(prefix.name + "_top.png")
     azimuth_span = max(azimuths) - min(azimuths) if len(azimuths) > 1 else 0.0
-    should_close_loop = azimuth_span >= LOOP_CLOSURE_AZIMUTH_THRESHOLD
+    should_close_loop = azimuth_span >= MIN_AZIMUTH_SPAN_FOR_LOOP_CLOSURE
     midpoint_label = "半圈位置" if should_close_loop else "中点位置"
     plot_title = "飞行器绕目标物飞行一圈轨迹" if should_close_loop else "飞行器曲线轨迹"
     top_plot_title = "飞行轨迹俯视图（经纬度平面）"
@@ -430,7 +434,7 @@ def main():
         output_path = Path(args.input)
 
     trajectory_data = load_trajectory(output_path)
-    target_label = f"目标:{args.target_name}" if args.target_name else "目标物"
+    target_label = f"目标物:{args.target_name}" if args.target_name else "目标物"
     save_plots(trajectory_data, show_plots=not args.no_show, target_label_base=target_label)
 
 
