@@ -7,12 +7,14 @@ plot_trajectory.py
 
 2. 指定目标经纬度，先生成环绕轨迹再绘制
    python plot_trajectory.py --target-lat 23.0 --target-lon 123.8
+   可选：--target-name "目标A"（用于目标位置命名；并用于默认轨迹 txt 文件名）
 
 依赖：matplotlib
 """
 
 import argparse
 import math
+import re
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -64,6 +66,7 @@ def parse_args():
     )
     parser.add_argument("--target-lat", type=float, help="目标纬度")
     parser.add_argument("--target-lon", type=float, help="目标经度")
+    parser.add_argument("--target-name", help="目标名称（用于文件命名和图中标注）")
     parser.add_argument("--altitude", type=float, default=10000.0, help="飞行器高度（米）")
     parser.add_argument("--pitch", type=float, default=85.0, help="俯仰角（度）")
     parser.add_argument("--azimuth-step", type=float, default=10.0, help="方位角步长（度）")
@@ -74,6 +77,20 @@ def parse_args():
         help="只保存图片，不弹出窗口（适合服务器环境）。",
     )
     return parser.parse_args()
+
+
+def slugify_target_name(target_name):
+    return re.sub(r"[^\w\-]+", "_", target_name.strip()).strip("_")
+
+
+def default_output_path_for_target(target_lat, target_lon, target_name):
+    if target_name:
+        safe_name = slugify_target_name(target_name)
+        if safe_name:
+            return Path(f"trajectory_{safe_name}.txt")
+    lat_tag = f"{target_lat:.6f}".replace("-", "m").replace(".", "p")
+    lon_tag = f"{target_lon:.6f}".replace("-", "m").replace(".", "p")
+    return Path(f"trajectory_lat{lat_tag}_lon{lon_tag}.txt")
 
 
 def generate_trajectory_file(
@@ -179,7 +196,7 @@ def load_trajectory(txt_file):
     }
 
 
-def save_plots(data, show_plots=True):
+def save_plots(data, show_plots=True, target_label="目标物"):
     lats = data["lats"]
     lons = data["lons"]
     alts = data["alts"]
@@ -214,7 +231,7 @@ def save_plots(data, show_plots=True):
         zorder=5,
         label="半圈位置",
     )
-    axis.scatter([center_lon], [center_lat], [0], color="orange", s=120, marker="*", zorder=5, label="目标物")
+    axis.scatter([center_lon], [center_lat], [0], color="orange", s=120, marker="*", zorder=5, label=target_label)
 
     for lon, lat, alt, azimuth in zip(lons, lats, alts, azimuths):
         axis.text(lon, lat, alt + 30, f"{int(round(azimuth))}°", fontsize=6, ha="center", color="gray")
@@ -232,7 +249,7 @@ def save_plots(data, show_plots=True):
     axis2.plot(lons + [lons[0]], lats + [lats[0]], "b-o", markersize=5, label="飞行轨迹")
     axis2.scatter(lons[0], lats[0], color="green", s=80, zorder=5, label="起点")
     axis2.scatter(lons[half_index], lats[half_index], color="red", s=80, zorder=5, label="半圈位置")
-    axis2.scatter(center_lon, center_lat, color="orange", s=120, marker="*", zorder=5, label="目标物中心")
+    axis2.scatter(center_lon, center_lat, color="orange", s=120, marker="*", zorder=5, label=f"{target_label}中心")
 
     for lon, lat, azimuth in zip(lons, lats, azimuths):
         axis2.annotate(
@@ -266,8 +283,11 @@ def main():
     if should_generate:
         if args.target_lat is None or args.target_lon is None:
             raise ValueError("如果要生成轨迹，必须同时提供 --target-lat 和 --target-lon。")
+        output_path = Path(args.input)
+        if output_path == Path("trajectory.txt"):
+            output_path = default_output_path_for_target(args.target_lat, args.target_lon, args.target_name)
         generate_trajectory_file(
-            output_path=args.input,
+            output_path=output_path,
             target_lat=args.target_lat,
             target_lon=args.target_lon,
             altitude=args.altitude,
@@ -275,9 +295,12 @@ def main():
             azimuth_step=args.azimuth_step,
             time_step=args.time_step,
         )
+    else:
+        output_path = Path(args.input)
 
-    trajectory_data = load_trajectory(args.input)
-    save_plots(trajectory_data, show_plots=not args.no_show)
+    trajectory_data = load_trajectory(output_path)
+    target_label = f"目标:{args.target_name}" if args.target_name else "目标物"
+    save_plots(trajectory_data, show_plots=not args.no_show, target_label=target_label)
 
 
 if __name__ == "__main__":
