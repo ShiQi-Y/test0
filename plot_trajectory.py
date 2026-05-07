@@ -9,6 +9,7 @@ plot_trajectory.py
    python plot_trajectory.py --target-lat 23.0 --target-lon 123.8
    可选：--target-name "目标A"（用于目标位置命名；并用于默认轨迹 txt 文件名）
    曲线轨迹：python plot_trajectory.py --target-lat 23.0 --target-lon 123.8 --trajectory-mode curve
+   目标锁定曲线：python plot_trajectory.py --target-lat 23.0 --target-lon 123.8 --trajectory-mode curve-lookat
 
 依赖：matplotlib
 """
@@ -47,6 +48,7 @@ HEADER = "\t".join(
 METERS_PER_DEGREE_LATITUDE = 111000.0
 AZIMUTH_LOOP_EPSILON = 1e-9
 LONGITUDE_SCALE_EPSILON = 1e-9
+LOOK_AT_DISTANCE_EPSILON = 1e-6
 AZIMUTH_ROUND_DECIMALS = 10
 ANGLE_FORMAT = ".3f"
 COORDINATE_FORMAT = ".6f"
@@ -77,9 +79,9 @@ def parse_args():
     parser.add_argument("--pitch", type=float, default=85.0, help="俯仰角（度）")
     parser.add_argument(
         "--trajectory-mode",
-        choices=["circle", "curve"],
+        choices=["circle", "curve", "curve-lookat"],
         default="circle",
-        help="轨迹模式：circle 为绕目标环绕，curve 为曲线通过。",
+        help="轨迹模式：circle 为绕目标环绕，curve 为曲线通过，curve-lookat 为始终朝向目标的曲线通过。",
     )
     parser.add_argument("--azimuth-step", type=float, default=10.0, help="方位角步长（度）")
     parser.add_argument("--curve-points", type=int, default=37, help="曲线轨迹采样点数（>=2）")
@@ -111,7 +113,7 @@ def slugify_target_name(target_name):
 
 
 def default_output_path_for_target(target_lat, target_lon, target_name, trajectory_mode):
-    prefix = "trajectory_curve" if trajectory_mode == "curve" else "trajectory"
+    prefix = "trajectory_curve" if trajectory_mode in {"curve", "curve-lookat"} else "trajectory"
     if target_name:
         safe_name = slugify_target_name(target_name)
         if safe_name:
@@ -124,6 +126,17 @@ def default_output_path_for_target(target_lat, target_lon, target_name, trajecto
 def calculate_azimuth_deg(delta_north, delta_east):
     """由北向与东向位移分量计算方位角（度，范围 [0, 360)）。"""
     return math.degrees(math.atan2(delta_east, delta_north)) % 360.0
+
+
+def calculate_pitch_to_target_deg(horizontal_distance, altitude):
+    """根据到目标的水平距离与高度，计算朝向目标的俯仰角（度，范围 [0, 90]）。"""
+    if altitude < 0:
+        raise ValueError("altitude 不能为负数。")
+    if horizontal_distance < 0:
+        raise ValueError("horizontal_distance 不能为负数。")
+    if horizontal_distance <= LOOK_AT_DISTANCE_EPSILON:
+        return 90.0
+    return math.degrees(math.atan2(altitude, horizontal_distance))
 
 
 def generate_trajectory_file(
@@ -290,6 +303,94 @@ def generate_curve_trajectory_file(
     output_path = Path(output_path)
     output_path.write_text("\n".join(rows), encoding="utf-8")
     print(f"曲线轨迹文件已生成：{output_path}")
+
+
+def generate_curve_trajectory_lookat_file(
+    output_path,
+    target_lat,
+    target_lon,
+    altitude=10000.0,
+    point_count=37,
+    span_meters=2000.0,
+    bulge_meters=0.0,
+    bearing_deg=90.0,
+    duration_seconds=100.0,
+    peak_altitude=None,
+):
+    """生成先升后降并始终看向目标的曲线轨迹，并按19列制表符格式写入txt。"""
+    if altitude <= 0:
+        raise ValueError("altitude 必须为正数。")
+    if point_count < 2:
+        raise ValueError("curve-points 必须大于等于 2。")
+    if span_meters <= 0:
+        raise ValueError("curve-span 必须大于 0。")
+    if bulge_meters < 0:
+        raise ValueError("curve-bulge 不能为负数。")
+    if duration_seconds <= 0:
+        raise ValueError("curve-duration 必须大于 0。")
+
+    lon_scale = METERS_PER_DEGREE_LATITUDE * math.cos(math.radians(target_lat))
+    if abs(lon_scale) < LONGITUDE_SCALE_EPSILON:
+        raise ValueError("目标纬度过于接近极点，无法稳定换算经度偏移。")
+    if peak_altitude is None:
+        peak_altitude = altitude + DEFAULT_CURVE_PEAK_ALTITUDE_GAIN
+    if peak_altitude <= altitude:
+        raise ValueError("curve-peak-altitude 必须大于 altitude，才能形成先升后降曲线。")
+
+    heading_rad = math.radians(bearing_deg)
+    point_offsets = []
+    for index in range(point_count):
+        progress = index / (point_count - 1)
+        longitudinal_offset = (progress - 0.5) * span_meters
+        lateral_offset = bulge_meters * math.sin(2.0 * math.pi * progress)
+        delta_north = longitudinal_offset * math.cos(heading_rad) - lateral_offset * math.sin(heading_rad)
+        delta_east = longitudinal_offset * math.sin(heading_rad) + lateral_offset * math.cos(heading_rad)
+        point_offsets.append((delta_north, delta_east))
+
+    rows = [HEADER]
+    previous_azimuth = (bearing_deg + 180.0) % 360.0
+    for index, (delta_north, delta_east) in enumerate(point_offsets):
+        progress = index / (point_count - 1)
+        altitude_value = altitude + (peak_altitude - altitude) * math.sin(math.pi * progress)
+        horizontal_distance = math.hypot(delta_north, delta_east)
+        pitch_value = calculate_pitch_to_target_deg(horizontal_distance, altitude_value)
+        look_north = -delta_north
+        look_east = -delta_east
+        if abs(look_north) <= LOOK_AT_DISTANCE_EPSILON and abs(look_east) <= LOOK_AT_DISTANCE_EPSILON:
+            azimuth_value = previous_azimuth
+        else:
+            azimuth_value = calculate_azimuth_deg(look_north, look_east)
+            previous_azimuth = azimuth_value
+
+        lat = target_lat + delta_north / METERS_PER_DEGREE_LATITUDE
+        lon = target_lon + delta_east / lon_scale
+        time_value = progress * duration_seconds
+        row = [
+            f"{time_value:{TIME_FORMAT}}",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            f"{pitch_value:{ANGLE_FORMAT}}",
+            f"{azimuth_value:{ANGLE_FORMAT}}",
+            f"{lat:{COORDINATE_FORMAT}}",
+            f"{lon:{COORDINATE_FORMAT}}",
+            f"{altitude_value:{ALTITUDE_FORMAT}}",
+        ]
+        rows.append("\t".join(row))
+
+    output_path = Path(output_path)
+    output_path.write_text("\n".join(rows), encoding="utf-8")
+    print(f"目标锁定曲线轨迹文件已生成：{output_path}")
 
 
 def load_trajectory(txt_file):
@@ -462,6 +563,19 @@ def main():
                 target_lon=args.target_lon,
                 altitude=args.altitude,
                 pitch_deg=args.pitch,
+                point_count=args.curve_points,
+                span_meters=args.curve_span,
+                bulge_meters=args.curve_bulge,
+                bearing_deg=args.curve_bearing,
+                duration_seconds=args.curve_duration,
+                peak_altitude=args.curve_peak_altitude,
+            )
+        elif args.trajectory_mode == "curve-lookat":
+            generate_curve_trajectory_lookat_file(
+                output_path=output_path,
+                target_lat=args.target_lat,
+                target_lon=args.target_lon,
+                altitude=args.altitude,
                 point_count=args.curve_points,
                 span_meters=args.curve_span,
                 bulge_meters=args.curve_bulge,
