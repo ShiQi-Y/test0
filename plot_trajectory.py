@@ -90,7 +90,7 @@ def parse_args():
         help="曲线横向弯曲幅度（米，允许为0；0表示沿主方向直线穿越目标）",
     )
     parser.add_argument("--curve-bearing", type=float, default=90.0, help="曲线主方向（度，0北90东）")
-    parser.add_argument("--curve-duration", type=float, default=100.0, help="曲线总时长（秒，默认100秒）")
+    parser.add_argument("--curve-duration", type=float, default=100.0, help="曲线总时长（秒，默认100秒；仅 curve 模式生效）")
     parser.add_argument("--curve-peak-altitude", type=float, help="曲线最高点高度（米，默认比基准高度高3000米）")
     parser.add_argument("--time-step", type=float, default=0.1, help="时间步长（秒）")
     parser.add_argument(
@@ -230,7 +230,7 @@ def generate_curve_trajectory_file(
     for index in range(point_count):
         progress = index / (point_count - 1)
         longitudinal_offset = (progress - 0.5) * span_meters
-        # sin(2πp) 在 p=0/0.5/1 时为 0：起点、中点、终点横向偏移为 0。
+        # sin(2πp) 在 p=0/0.5/1 时为 0：起点、中点、终点横向偏移为 0（默认 bulge=0 时全程为 0）。
         lateral_offset = bulge_meters * math.sin(2.0 * math.pi * progress)
         delta_north = longitudinal_offset * math.cos(heading_rad) - lateral_offset * math.sin(heading_rad)
         delta_east = longitudinal_offset * math.sin(heading_rad) + lateral_offset * math.cos(heading_rad)
@@ -255,7 +255,7 @@ def generate_curve_trajectory_file(
 
         lat = target_lat + delta_north / METERS_PER_DEGREE_LATITUDE
         lon = target_lon + delta_east / lon_scale
-        # sin(πp) 在 p=0 和 p=1 为 0，在 p=0.5 为 1，形成“起终点低、中点高”。
+        # sin(πp) 在 p=0 和 p=1 为 0，在 p=0.5 为 1：前半程爬升、后半程下降，并在中段达到最高点。
         altitude_value = altitude + (peak_altitude - altitude) * math.sin(math.pi * progress)
         azimuth = round(calculate_azimuth_deg(motion_north, motion_east), CURVE_AZIMUTH_ROUND_DECIMALS)
         time_value = progress * duration_seconds
