@@ -83,8 +83,10 @@ def parse_args():
     parser.add_argument("--azimuth-step", type=float, default=10.0, help="方位角步长（度）")
     parser.add_argument("--curve-points", type=int, default=37, help="曲线轨迹采样点数（>=2）")
     parser.add_argument("--curve-span", type=float, default=2000.0, help="曲线跨越长度（米）")
-    parser.add_argument("--curve-bulge", type=float, default=900.0, help="曲线横向弯曲幅度（米）")
+    parser.add_argument("--curve-bulge", type=float, default=0.0, help="曲线横向弯曲幅度（米，默认0表示中段正好穿越目标）")
     parser.add_argument("--curve-bearing", type=float, default=90.0, help="曲线主方向（度，0北90东）")
+    parser.add_argument("--curve-duration", type=float, default=100.0, help="曲线总时长（秒）")
+    parser.add_argument("--curve-peak-altitude", type=float, help="曲线最高点高度（米，默认比起终点高度高3000米）")
     parser.add_argument("--time-step", type=float, default=0.1, help="时间步长（秒）")
     parser.add_argument(
         "--no-show",
@@ -191,11 +193,12 @@ def generate_curve_trajectory_file(
     pitch_deg=85.0,
     point_count=37,
     span_meters=2000.0,
-    bulge_meters=900.0,
+    bulge_meters=0.0,
     bearing_deg=90.0,
-    time_step=0.1,
+    duration_seconds=100.0,
+    peak_altitude=None,
 ):
-    """生成通过目标区域的曲线轨迹，并按19列制表符格式写入txt。"""
+    """生成先升后降并越过目标上方的曲线轨迹，并按19列制表符格式写入txt。"""
     if altitude <= 0:
         raise ValueError("altitude 必须为正数。")
     if not (0 < pitch_deg < 90):
@@ -206,25 +209,31 @@ def generate_curve_trajectory_file(
         raise ValueError("curve-span 必须大于 0。")
     if bulge_meters < 0:
         raise ValueError("curve-bulge 不能为负数。")
-    if time_step <= 0:
-        raise ValueError("time-step 必须大于 0。")
+    if duration_seconds <= 0:
+        raise ValueError("curve-duration 必须大于 0。")
 
     lon_scale = METERS_PER_DEGREE_LATITUDE * math.cos(math.radians(target_lat))
     if abs(lon_scale) < LONGITUDE_SCALE_EPSILON:
         raise ValueError("目标纬度过于接近极点，无法稳定换算经度偏移。")
+    if peak_altitude is None:
+        peak_altitude = altitude + 3000.0
+    if peak_altitude <= altitude:
+        raise ValueError("curve-peak-altitude 必须大于 altitude，才能形成先升后降曲线。")
 
     heading_rad = math.radians(bearing_deg)
     point_offsets = []
     for index in range(point_count):
         progress = index / (point_count - 1)
         longitudinal_offset = (progress - 0.5) * span_meters
-        lateral_offset = bulge_meters * math.sin(math.pi * progress)
+        # 使用 2π 让横向偏移在中点回到 0，确保中段从目标上方穿越。
+        lateral_offset = bulge_meters * math.sin(2.0 * math.pi * progress)
         delta_north = longitudinal_offset * math.cos(heading_rad) - lateral_offset * math.sin(heading_rad)
         delta_east = longitudinal_offset * math.sin(heading_rad) + lateral_offset * math.cos(heading_rad)
         point_offsets.append((delta_north, delta_east))
 
     rows = [HEADER]
     for index, (delta_north, delta_east) in enumerate(point_offsets):
+        progress = index / (point_count - 1)
         if index == 0:
             next_north, next_east = point_offsets[index + 1]
             motion_north = next_north - delta_north
@@ -241,8 +250,9 @@ def generate_curve_trajectory_file(
 
         lat = target_lat + delta_north / METERS_PER_DEGREE_LATITUDE
         lon = target_lon + delta_east / lon_scale
+        altitude_value = altitude + (peak_altitude - altitude) * math.sin(math.pi * progress)
         azimuth = round(calculate_azimuth_deg(motion_north, motion_east), CURVE_AZIMUTH_ROUND_DECIMALS)
-        time_value = index * time_step
+        time_value = progress * duration_seconds
         row = [
             f"{time_value:{TIME_FORMAT}}",
             "0",
@@ -262,7 +272,7 @@ def generate_curve_trajectory_file(
             f"{azimuth:{ANGLE_FORMAT}}",
             f"{lat:{COORDINATE_FORMAT}}",
             f"{lon:{COORDINATE_FORMAT}}",
-            f"{altitude:{ALTITUDE_FORMAT}}",
+            f"{altitude_value:{ALTITUDE_FORMAT}}",
         ]
         rows.append("\t".join(row))
 
@@ -445,7 +455,8 @@ def main():
                 span_meters=args.curve_span,
                 bulge_meters=args.curve_bulge,
                 bearing_deg=args.curve_bearing,
-                time_step=args.time_step,
+                duration_seconds=args.curve_duration,
+                peak_altitude=args.curve_peak_altitude,
             )
         else:
             generate_trajectory_file(
