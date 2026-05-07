@@ -74,9 +74,9 @@ def generate_trajectory_file(
     time_step=0.1,
 ):
     if altitude <= 0:
-        raise ValueError("altitude 必须大于 0。")
+        raise ValueError("altitude 必须为正数。")
     if not (0 < pitch_deg < 90):
-        raise ValueError("pitch 必须在 0 到 90 度之间。")
+        raise ValueError("pitch 必须在 0 到 90 度之间（不含端点）。")
     if azimuth_step <= 0:
         raise ValueError("azimuth-step 必须大于 0。")
     if time_step <= 0:
@@ -142,7 +142,9 @@ def load_trajectory(txt_file):
                 continue
             columns = line.split("\t")
             if len(columns) < 19:
-                raise ValueError(f"第 {line_number + 1} 行列数不足：{line}")
+                raise ValueError(
+                    f"第 {line_number + 1} 行列数不足：期望至少 19 列，实际 {len(columns)} 列。"
+                )
             times.append(float(columns[0]))
             alts.append(float(columns[18]))
             azimuths.append(float(columns[15]))
